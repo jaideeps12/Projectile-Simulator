@@ -1,30 +1,151 @@
-import math
-import matplotlib.pyplot as plt 
-def calculate_trajectory(speed, angle_deg, g=9.8):
-    angle_rad=math.radians(angle_deg)
-    t_flight=(2*speed*math.sin(angle_rad))/g
-    x_points=[]
-    y_points=[]
-    t=0
-    dt=0.001
-    while t<=t_flight:
-        x=speed*math.cos(angle_rad)*t
-        y=speed*math.sin(angle_rad)*t -(0.5*g*t**2)
-        x_points.append(x)
-        y_points.append(y)
-        t += dt
 
-    return x_points,y_points
-n=int(input("Enter how many graphs do you want to plot"))
-for i in range(n):
- speed = float(input("Enter the value of initial speed"))
- angle_deg=float(input("Enter the projection of projectile in theta"))
- x, y = calculate_trajectory(speed, angle_deg)
- plt.plot(x,y,label=angle_deg)
-plt.title("Projectile")
-plt.xlabel("Distance")
-plt.ylabel("Height")
-plt.legend()
-plt.grid("True")
-plt.annotate()
-plt.show()
+import math
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.animation import FuncAnimation
+
+
+def calculate_trajectory(speed, elevation_deg, azimuth_deg, g=9.81):
+    """Calculate a 3D projectile trajectory without air resistance."""
+
+    elevation = math.radians(elevation_deg)
+    azimuth = math.radians(azimuth_deg)
+
+    vx = speed * math.cos(elevation) * math.cos(azimuth)
+    vy = speed * math.cos(elevation) * math.sin(azimuth)
+    vz = speed * math.sin(elevation)
+
+    flight_time = 2 * vz / g
+    time = np.linspace(0, flight_time, 250)
+
+    x = vx * time
+    y = vy * time
+    z = vz * time - 0.5 * g * time**2
+
+    z = np.maximum(z, 0)
+
+    max_height = vz**2 / (2 * g)
+    horizontal_range = math.hypot(x[-1], y[-1])
+
+    return x, y, z, time, flight_time, max_height, horizontal_range
+
+
+def main():
+    print("=" * 50)
+    print("       PROJECTILE LAB: 3D SIMULATOR")
+    print("=" * 50)
+
+    try:
+        speed = float(input("Initial speed (m/s): "))
+        elevation = float(input("Elevation angle (0-90 degrees): "))
+        azimuth = float(input("Direction angle (degrees): "))
+
+        if not all(map(math.isfinite, [speed, elevation, azimuth])):
+            raise ValueError("All inputs must be finite numbers.")
+
+        if speed <= 0:
+            raise ValueError("Speed must be positive.")
+
+        if not 0 <= elevation <= 90:
+            raise ValueError("Elevation must be between 0 and 90 degrees.")
+
+        if elevation == 0:
+            raise ValueError("Use an elevation greater than 0 degrees.")
+
+    except ValueError as error:
+        print(f"Invalid input: {error}")
+        return
+
+    x, y, z, time, flight_time, max_height, distance = (
+        calculate_trajectory(speed, elevation, azimuth)
+    )
+
+    fig = plt.figure(figsize=(11, 8))
+    ax = fig.add_subplot(111, projection="3d")
+
+    ax.set_title("PROJECTILE LAB | 3D MOTION", fontsize=15, pad=20)
+    ax.set_xlabel("X Distance (m)")
+    ax.set_ylabel("Y Distance (m)")
+    ax.set_zlabel("Height (m)")
+
+    ax.set_xlim(min(0, x.min()), max(1, x.max()) * 1.1)
+    ax.set_ylim(min(0, y.min()) - 1, max(1, y.max()) * 1.1)
+    ax.set_zlim(0, max(1, max_height) * 1.25)
+
+    ax.set_box_aspect((
+        max(1, np.ptp(x), abs(x[-1]) * 0.1),
+        max(1, np.ptp(y), abs(y[-1]) * 0.1),
+        max(1, max_height)
+    ))
+
+    # Draw the ground plane
+    ground_x, ground_y = np.meshgrid(
+        np.linspace(ax.get_xlim()[0], ax.get_xlim()[1], 10),
+        np.linspace(ax.get_ylim()[0], ax.get_ylim()[1], 10)
+    )
+    ground_z = np.zeros_like(ground_x)
+
+    ax.plot_surface(
+        ground_x, ground_y, ground_z,
+        alpha=0.12
+    )
+
+    # Initial trajectory and projectile marker
+    trail, = ax.plot([], [], [], linewidth=2.5, label="Trajectory")
+    projectile, = ax.plot([], [], [], "o", markersize=9, label="Projectile")
+
+    info = ax.text2D(
+        0.02, 0.94, "",
+        transform=ax.transAxes,
+        fontsize=10
+    )
+
+    ax.legend(loc="upper right")
+
+    def initialize():
+        trail.set_data([], [])
+        trail.set_3d_properties([])
+        projectile.set_data([], [])
+        projectile.set_3d_properties([])
+        info.set_text("")
+        return trail, projectile, info
+
+    def update(frame):
+        trail.set_data(x[:frame + 1], y[:frame + 1])
+        trail.set_3d_properties(z[:frame + 1])
+
+        projectile.set_data([x[frame]], [y[frame]])
+        projectile.set_3d_properties([z[frame]])
+
+        info.set_text(
+            f"Time: {time[frame]:.2f} s\n"
+            f"Height: {z[frame]:.2f} m\n"
+            f"Distance: {math.hypot(x[frame], y[frame]):.2f} m"
+        )
+
+        return trail, projectile, info
+
+    animation = FuncAnimation(
+        fig,
+        update,
+        frames=len(time),
+        init_func=initialize,
+        interval=20,
+        blit=False,
+        repeat=True
+    )
+
+    print("\nSIMULATION RESULTS")
+    print("-" * 35)
+    print(f"Flight time:       {flight_time:.2f} s")
+    print(f"Maximum height:    {max_height:.2f} m")
+    print(f"Horizontal range:  {distance:.2f} m")
+    print("-" * 35)
+    print("Close the graph window to exit.")
+
+    plt.tight_layout()
+    plt.show()
+
+
+if __name__ == "__main__":
+    main()
